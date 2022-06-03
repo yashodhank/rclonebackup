@@ -3,11 +3,11 @@
 # SERVER_NAME="$(ifconfig | grep broadcast | awk {'print $2'} | head -1)" # get IP
 # SERVER_NAME="$(ifconfig | grep broadcast | awk {'print $2'} | awk '{if(NR==1) print $0}')"
 # SERVER_NAME="$(ifconfig | grep broadcast | awk {'print $2'} | sed -n 1p)"
-SERVER_NAME="$(v-list-sys-info plain | awk {'print $1'})"
-BUCKET_NAME="monjin-wp" # IMPORTANT: CHANGE THIS TO YOUR WASABI S3 Bucket Name
+VESTABIN="/usr/local/vesta/bin"
+SERVER_NAME="$($VESTABIN/v-list-sys-info plain | awk {'print $1'})"
+BUCKET_NAME="monjin-wp"
 TIMESTAMP=$(date +"%F")
 BACKUP_DIR="/mnt/backup-vnc/$TIMESTAMP"
-VESTABIN="/usr/local/vesta/bin"
 #VESTAUSERS="$($VESTABIN/v-list-users | sed 1,2d | awk {'print $1'})" # kind of hacky
 VESTAUSERS="$($VESTABIN/v-list-sys-users plain)" # clean approach
 MYSQLPATH="$(mysql --help | grep "Default options" -A 1 | sed -n 2p | awk {'print $2'} | sed 's/\~/\/root/')"
@@ -63,15 +63,15 @@ if [[ "$VESTA" = "vesta" ]]; then
 	echo "VPS User vestacp ";
 	echo "Backup vestacp Config";
 	cp -r /usr/local/vesta $BACKUP_DIR/vesta
-        tar -zcf $BACKUP_DIR/usr_local_vesta.tar.gz $BACKUP_DIR/vesta
-        rm -fr $BACKUP_DIR/vesta/
+        tar -zcf $BACKUP_DIR/usr_local_vesta.tar.gz $BACKUP_DIR/vesta #pack dir
+        rm -fr $BACKUP_DIR/vesta/ #remove unpacked dir as we dont want it in s3 uploads
         echo "Backup each vesta users and their sites: config, files, mails and db"
         for user in ${VESTAUSERS}; do
               echo "Backing up Vesta User: ${user}"
               $VESTABIN/v-backup-user $user | tee /dev/stderr | grep "Local:" | awk {'print $4'} >> $BACKUP_DIR/backup_tar_list.txt
               echo "Backup for Vesta User: ${user} is completed!"
         done
-#        rm -f $BACKUP_DIR/backup_tar_list.txt
+        cp $(<$BACKUP_DIR/backup_tar_list.txt) $BACKUP_DIR
 else
 	echo "NOT User Vestacp"
 fi
@@ -136,7 +136,7 @@ done
 
 for i in $VNC_RCLONE_REMOTE
 	do
-		rclone -q --min-age 1d delete --s3-force-path-style=false "$i:$BUCKET_NAME/$SERVER_NAME"
+		rclone -q --min-age 90d delete --s3-force-path-style=false "$i:$BUCKET_NAME/$SERVER_NAME"
 	echo "done remote $i"
 done
 
